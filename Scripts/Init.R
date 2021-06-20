@@ -1,0 +1,6 @@
+library(jsonlite)
+library(tidyverse)
+library(stringr)
+library(xml2)
+library(rvest)
+library(lubridate)

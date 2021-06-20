@@ -1,0 +1,462 @@
+---
+title: 'Media Dominance: How often does Trump appear in news headlines in the New York Times'
+author: "Bobatz Rhyner"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    code_folding: show
+    fig_height: 6
+    highlight: tango
+    theme: spacelab
+    toc: yes
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+  pdf_document:
+    toc: yes
+editor_options:
+  chunk_output_type: console
+bibliography: literature.bib
+---
+
+```{r setup, include=FALSE}
+
+library(jsonlite)
+library(tidyverse)
+library(stringr)
+library(xml2)
+library(rvest)
+library(lubridate)
+library(knitr)
+library(stargazer)
+library(kableExtra)
+
+options(max.print="150")
+opts_chunk$set(echo=T,
+	             cache=FALSE,
+               prompt=FALSE,
+               tidy=TRUE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE)
+opts_knit$set(width=75)
+
+```
+
+```{r citation help, echo=FALSE, eval=FALSE}
+@Azari2016
+@Wells2016
+@Lawrence2017
+```
+
+
+\tableofcontents
+\newpage
+
+## Introduction
+
+When Donald J. Trump first announced his run for presidency, he sent shock waves through the ranks of the political elites of the United States of America. As the political outsider he was, his opponents did not take his candidacy seriously. Only after the field of candidates dwindled, a Donald Trump presidency became more and more likely. 
+Trump was not only a political outsider, he knew how to put on a show. On his rallies, he was able inspire the crowds while on the other hand he often caught the media's attention because of his talking points. The relationship between Donald Trump and the news media was tense. Mr. Trump often accused the news media of one-sided coverage and only emphasizing the bad. While it certainly is interesting to put this to the test, this short paper focuses instead on the frequency of Trump-related news coverage during his candidacy as well as his presidency. More specifically, I investigate the following questions:
+
+RQ1: How often is Trump mentioned in the headlines of New York times articles from the _Politics_ news desk?
+
+RQ2: What events can be linked to the frequency of Trump mentionings in these headlines?
+
+The rest of the article is structured as follows: in the next section, I review some literature on the relationship of Trump and the different news outlets. In the third section, some time is spent on the data gathering process and the methodolody of the analysis. The fourth section, the results are presented and the fifth section discusses the results. 
+
+
+
+## Trump and the media: a rocky relationship
+
+Trump and the traditional news outlets maintained a tense relationship. Most of his campaign, Trump rather tweeted his talking points in Twitter rants than letting the media frame his words. Coming from the entertainment industry and concerned with his own brand, Trump tried to firmly control the public perception of himself. Wells et al. (2016) elaborate:
+
+> [H]e favored courting controversy through provocative pronouncements, attributed comments, distorted facts, and an off-the-cuff ("politically incorrect") speaking style. (@Wells2016 [p. 670])
+
+Trump not only stood out with his unique campaign style, but he was able to distinct himself by crafting his own persona and how the media perceived it @Wells2016. In addition, Trump invested considerable more time and effort in being available for the media and by doing this provided the news with material that consistently generated clicks and views (Karpf, 2016 in Wells et al., 2016). Some estimate the generated revenue of coverage on Trump to be about $2 billion (Confessore & Yourish, 2016 and Stein, 2016 in Wells et al., 2016).
+
+In Wells et al. (2016), the authors seek to investigate Trump's hybrid media campaigning was successful by creating counts of several forms of news media such as political debates, tweets, news stories, staged public or media events as well as unscheduled media appearances and finally the delegate count for Trump @Wells2016 [p. 671]. The authors then estimate time series models to explain Trump media coverage. The results showed - among others - "that retweets of Trump's posts are a significant positive predictor of news stories and blog posts" @Wells2016 [p. 672]. Furthermore, the analysis implies that when coverage is low, firing a "tweet-storm" makes the headlines. And finally, while Trump successfully courted media attention, he failed to translate that into electoral sucess during the primary period @Wells2016 [p. 675].
+
+Despite the predominantly negative coverage by traditional news outlets, Trump nevertheless benefitted from the extenssive media coverage. Some even argue that this is precisely the reason why Trump garnered so much supporters and win the primaries (e.g. Confessore & Yourish, 2016 in Azari, 2016). In her short article, Azari (2016) attributes the media an important role in political institutions and more specifically in the nomination process (p. 677). She writes that during the primaries, "parties have to unite their coalitions through ideas about what the nominee stands for" (@Azari2016 [p. 678]). She further argues that although Trump lacked a highly sophisticated campaign apparatus, he was able to incorporate and propagate - alas with the most likely unintentional help of the news media - a message that resonated through not only the party but also the voters and this ultimately helped him to become the Republican nominee. In sum, she offers three key perspectives of how the news media operates within the party framework during the 2016 election cycle. Firstly, the news media enabled Trump to propagate a message that resonated with enough voters to secure his nomination. Secondly, the news media - namely Fox News - adopted the reluctance to back up Trump by the party elites. In doing that, they directly acted within the party network by taking the side of specific interest groups. And thirdly, by emphasizing that Trump is "unfit" to hold office, values and impressions of the presidency are reinforced. This often invites people to draw false conclusions regarding e.g. presidential power (Azari, 2016). 
+
+As a critical response to @Azari2016, @Lawrence2017 question whether the news media actually behaved differently as we would have expected them to. According to @Lawrence2017, the media just did what the media usually does, namely (1) following the polls and (2) cover candidates that are interesting and have "entertainment value" (Patterson, 2016 in Lawrence and Boydstun, 2017). The authors further question the validity of the statements by @Wells2016 about their estimated effects (Lawrence and Boydstun, 2017). 
+
+Instead of estimating models on news coverage, I want to only investigate to what extent Trump was dominating the headlines of the New York Times before and during his presidency. Furthermore, I want to identify events that are linked to increased coverage. In the next section, the data as well as the methodology are presented.
+
+## Data gathering and methodology
+
+The data was scraped via the New York Times API (Application Programming Interface) which required an access key. The data from the API is in Json format, so I need the _jsonlite_ package to convert it into a dataframe. Furthermore, for the API - call I specified the following arguments:
+
+* begindate: character string in the format YYYYMMDD
+* enddate: character string in the format YYYYMMDD
+* facet_filter: logical, if TRUE => facet counts use filters
+* fq: filter query
+* api-key: API access token
+
+For the analysis I chose to check the period from January 1st 2014 (year when Trump announces candidancy) to December 31st 2020. I additionally filter the query by typing `fq=news_desk: ("Politics")` to only filter articles from the politics news desk. The base url looks like this:
+
+```{r eval=FALSE, echo=TRUE}
+baseurl <- paste0('http://api.nytimes.com/svc/search/v2/articlesearch.json?',
+                             'begin_date=', # begin_date,
+                             '&end_date=', # end_date,
+                             '&facet_filter=true&fq=news_desk%3A(%22Politics%22)', # %22 is a quotation mark and %3 is a space
+                             '&api-key=', NYT_KEY, 
+                             #"&page=0", 
+                             sep='')
+```
+
+As I am not looking for a specific key word, the usual `q=` argument is missing. 
+In order to better automate the query as well as ensuring smooth runtime, two date matrices were constructed that can easily be implented in a loop. 
+
+```{r}
+begindate <- as.data.frame(matrix(NA, nrow = 7, ncol = 12))
+
+for (i in 1:7) {
+  
+  # define helper variable as I start in the year 2014
+  helper <- i + 13
+  
+  # get year in 2014 format
+  year <- paste0("20", helper)
+  
+  # name row
+  # rownames(begindate[i]) <- year
+  
+  for (j in 1:12) {
+    
+    # get month in 01 format
+    month <- str_pad(j, pad = 0, width = 2, "left")
+    
+    # name column 
+    # colnames(begindate[j]) <- month
+    
+    # get days in 01 format
+    days <- rep("01", 12)
+    
+    # paste everything into a string so it can be handled by the API
+    begindate[i,j] <- paste0(year, month, days[j])
+    
+    
+  }
+  
+}
+
+# the same for the end date
+enddate <- as.data.frame(matrix(NA, nrow = 7, ncol = 12))
+
+for (i in 1:7) {
+  
+  # define helper variable as I start in the year 2014
+  helper <- i + 13
+  
+  # get year in 2014 format
+  year <- paste0("20", helper)
+  
+  # name row
+  # rownames(enddate[i]) <- year
+  
+  for (j in 1:12) {
+    
+    # get month in 01 format
+    month <- str_pad(j, pad = 0, width = 2, "left")
+    
+    # name column 
+    # colnames(enddate[j]) <- month
+    
+    # get days of leap year
+    if(year == "2016" | year == "2020") {
+      
+      days <- c(31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+      
+    }else{
+      
+      days <- c(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+      
+    }
+    
+    # paste everything into a string so it can be handled by the API
+    enddate[i,j] <- paste0(year, month, days[j])
+    
+  }
+  
+}
+```
+
+With these date data frames, I specify the following loop to get the data. 
+
+```{r eval=FALSE}
+# results as a list of several data frames
+results <- list()
+
+for (i in 1:7) {
+  
+  # first loop loops through the rows of the date data frames (= year)
+  
+  for (k in 1:12) {
+    
+    # second loop loops through the columns of the date data frames (= months)
+    
+    # initial query
+    
+    running_url <- paste0('https://api.nytimes.com/svc/search/v2/articlesearch.json?',
+                             'begin_date=', begindate[i,k], 
+                             '&end_date=', enddate[i,k],
+                             '&facet_filter=true&fq=news_desk%3A(%22Politics%22)',
+                             '&api-key=',NYT_KEY,
+                             sep = '')
+    
+    
+    # get max pages from initial query
+    
+    initial_Query <- fromJSON(running_url)
+    
+    maxPages <- round((initial_Query$response$meta$hits[1] / 10) - 1)
+    
+    
+    # make sure maxPages is not negative
+    
+    if(maxPages < 0) {
+      
+      maxPages <- 0
+      
+    }
+    
+    # if there is only one page of results, I might run into problems with the rate limit, therefore
+    
+    Sys.sleep(6)
+    
+    # get results from page 0 to max by using a third for loop
+    
+    for (j in 0:maxPages) {
+      
+      # get results from page j
+      
+      nytSearch <- fromJSON(paste0(running_url, "&page=", j), flatten = T) %>%
+        
+        # save data in a data frame
+        
+        data.frame()
+      
+      
+      # progress 
+      
+      print(paste0("Retrieving page ", j, " from ", month(ymd(begindate[i,k]), label = T), year(ymd(begindate[i,k]))))
+      
+      
+      # save page searches
+      
+      results[[paste("Page", j, "in", month(ymd(begindate[i,k]), label = T), year(ymd(begindate[i,k])))]] <- nytSearch
+      
+      
+      # pause for 6 seconds so the rate limit per minute is not violated
+      
+      Sys.sleep(7)
+      
+      
+    }
+    
+    
+    
+    # progress
+    
+    print(paste0("Month ", k, " complete!"))
+    
+    
+  }
+  
+  # progress
+  
+  print(paste0("Year ", i, " complete!"))
+  
+}
+```
+
+With this code, I was able to scrape all the articles for the analysis. However, around 2016/2017 there were several months without a hit. So the code threw some errors. By manually adjusting `k, i, and j` I could solve the issue. For the next time, it will be better to loop through years instead of months because there were not as many hits as anticipated [^1].
+
+[^1]: The reason why looping through different begin and end dates was, because it was not possible to get all the articles with only looping through the pages (the _page argument_ cannot be specified until 950).
+
+```{r eval=FALSE}
+politics_nyt <- bind_rows(results)
+
+write_rds(politics_nyt, file = "trump_politics_nyt.Rda")
+```
+
+And finally, this code snippet  binds all data frames within the results list by row. The data set can be accessed here. It can be imported by using the command below. 
+
+```{r}
+# import Data set ########
+
+nyt <- readRDS("trump_politics_nyt.Rda")
+
+# recode date variable
+
+nyt$pub.date <- as_date(nyt$response.docs.pub_date) 
+```
+
+### First overview over the data
+
+In order to get a first glimpse on the data, some tables and graphs were created.
+
+```{r}
+# overview ###############
+colnames(nyt)
+
+# dimensions
+dim(nyt)
+
+```
+
+```{r}
+# type of material 
+df_type <- nyt %>% 
+  
+  group_by(response.docs.type_of_material) %>%
+  
+  summarise(freq = n())
+
+kable(df_type) %>% kable_styling(full_width = F, "hover")
+
+```
+
+In total, there are over 9000 articles in the data set with the majority being news articles. There are however, also some interactive pieces and videos among the data. Smaller categories include _briefings_, _news analyses_, _obituaries_, and _texts_. 
+
+```{r}
+# average word count by type of material
+avg_wc <- nyt %>%
+  
+  filter(response.docs.word_count > 0) %>%
+   
+  group_by(response.docs.type_of_material) %>%
+  
+  summarise(freq = n(), 
+            avg_words = mean(response.docs.word_count, na.rm = T))
+
+kable(avg_wc) %>% kable_styling(full_width = F, "hover")
+
+```
+
+For the average length of the pieces, only the written articles were considered. While _texts_ have the highest average word count (almost 15000), the _news articles_ average at around 850. 
+
+```{r}
+# published articles by date
+gg1 <- ggplot(nyt, 
+              aes(x = pub.date)) + 
+  
+  # geom_area(stat = "bin")
+  
+  geom_bar(stat = "bin", binwidth = 20) + theme_minimal() + 
+  
+  ggtitle("Published Articles by Date")
+
+gg1
+
+```
+
+A first visualization of the gathered data suggests that in the beginning of the year 2016, there is the first peak, followed by a dip towards the end of 2016 and well into 2017 (as already mentioned above). From 2018 onwards, the number of articles from the _politics_ news desk is again increasing, elapsing the peak in 2016 towards the end of 2020. [^2]
+
+[^2]: These are the article counts as they are in the data that serve as the basis for the analysis. Further down in the paper there is a similar graph that plots all article counts against articles that mention Trump in the headline.
+
+```{r}
+# dates with most published articles
+most_art <- nyt %>%
+  
+  group_by(pub.date) %>%
+  
+  summarise(n.art = n()) %>%
+  
+  arrange(desc(n.art)) %>%
+  
+  head(n = 35) 
+
+most_art <- cbind(most_art[c(1:7),], most_art[c(8:14),], most_art[c(15:21),], most_art[c(22:28),], most_art[c(29:35),])
+
+kable(most_art) %>% kable_styling(full_width = F, "hover", font_size = 11)
+```
+
+And finally, as already teased in the graph further above, the most published articles by publication date are mostly from 2020 with some 2019 and 2016 dates sprinkled in between. Looking at these dates already hints on what events could be driving increased coverage. 
+
+## Trump headlines in NYT politics news desk
+
+The main goal of the analysis is to count the instances of Trump mentionings in the headlines and in a secondary inquiry relate events to increased news coverage. 
+
+First, I have to code a new variable for Trump headlines. I do the following:
+```{r}
+# Analysis ##################
+# Trump mentioned in the Headline? 
+# create new variable: if Trump is mentioned in the Headline --> 1, 0 otherwies
+nyt$Trump <- ifelse(grepl("Trump", nyt$response.docs.headline.main), 1, 0)
+```
+With this new variable, I can calucate the frequency of Trump headlines.
+```{r}
+# relative freq of Trump mentionings
+sum(nyt$Trump)/nrow(nyt) * 100
+```
+Without further subsetting, the base frequency of Trump headlines is roughly 25% percent which is rather high. A sample of Trump headlines can be obtained with the _sample_ command:
+```{r}
+# sample of headlines mentioning Trump
+sample(nyt$response.docs.headline.main[nyt$Trump == 1], 10)
+```
+The graph below shares the same idea as the previous graph but adds another layer to it. We now can see how often Trump was mentioned during the period under scrutiny. Trump first was mentioned in June 2015 when he announced his ambitions to become the president of the United States (June 16th 2015 [^3]). The initial peak is in March 2016 when Trump did surprisingly well on Super Tuesday. Most Trump mentionings in the headlines were in October 2020 in the run up of the 2020 U.S. election. 
+```{r fig.width=8}
+trump_time_2 <- nyt %>%
+  
+  mutate(yyyy.mm = format_ISO8601(pub.date, precision = "ym")) %>%
+  
+  group_by(yyyy.mm, Trump) %>%
+  
+  summarise(n.articles = n())
+
+gg3 <- ggplot(trump_time_2, aes(x = yyyy.mm, y = n.articles, fill = factor(Trump))) + 
+  
+  geom_bar(stat = "identity") + 
+  
+  theme_minimal() +
+  
+  theme(axis.text.x = element_text(angle = 60, hjust = 1, size = 8),
+        legend.position = "bottom") + 
+  
+  ggtitle("Trump mentionings over time") + 
+  
+  scale_fill_manual(name = "Was Trump mentioned?", labels = c("No", "Yes"), values = c("darkred", "darkblue"))
+
+
+gg3
+ 
+```
+
+[^3]: [Wikipedia entry on Donald Trumps campaign](https://en.wikipedia.org/wiki/Donald_Trump_2016_presidential_campaign). 
+
+When taking into consideration the fact that Donald Trump only entered the race in June 2015, the frequency with which Trump was mentioned slightly increases to 26.5%. 
+```{r}
+sum(nyt$Trump)/nrow(nyt[nyt$pub.date > "2015-06-15", ]) * 100
+```
+In order to further pinpoint the exact dates on which news coverage was highest, I specify:
+```{r}
+most_art_trump <- nyt %>%
+  
+            filter(Trump == 1) %>%
+            
+            group_by(pub.date) %>%
+            
+            summarise(n.art = n()) %>%
+            
+            arrange(desc(n.art)) %>%
+            
+            head(n = 35) 
+
+most_art_trump <- cbind(most_art_trump[c(1:7),], most_art_trump[c(8:14),], most_art_trump[c(15:21),], 
+                        most_art_trump[c(22:28),], most_art_trump[c(29:35),])
+
+kable(most_art_trump) %>% kable_styling(full_width = F, "hover", font_size = 11)
+
+```
+
+The most articles were published on August 27th 2020, the last day of the Republican National Convention (the convention started on August 24th) where he was once more accepted as the Republican nominee. Other notable events in terms of published articles are the days leading up to and following the first presidential debate on September 29th 2020 and the last presidential debate on October 22nd 2020. And finally, many articles were published around Election Night on November 3rd/4th 2020. It becomes clear that the campaign in 2020 received much more coverage than the previous campaign in 2016. Furthermore, the almost complete lack of any political coverage after Trump secured his victory over Hillary Clinton is surprising. The few articles published during this period (Q4 2016 - Q1 2018) are almost all about Trump. It might hint to the notion that the news media admitted defeat to Donald Trump and resigned to publish any further articles about him or politics in general. However, this is only an attempt to make sense of the almost complete lack of any political coverage during this time.
+
+## Discussion
+
+In this article I investigated the frequency with which Donald Trump appears in New York times headlines of articles published by the politics news desk. Furthermore, dates with high coverage were identified to reference important events on the campaign trail and during Trump's presidency. There is much research on the relationship between Trump and the news media a few of which were referenced in this article. While some argue that the media was playing an important role in enabling Trump's victory (e.g. Azari, 2016; Wells et al., 2016), some argue that the news media did not deviate from their usual modus operandi (e.g. Lawrence and Boydstun, 2017). In my analysis I find that about one fourth of all articles mention Trump in the headline which is a rather high frequency. Most articles were published in the context of his campaign activities with the last day of the Republican National Convention on August 27th 2020 receiving the most coverage. Furthermore, a massive dip in political coverage seemed to have characterized the first year of Trump's presidency. Can it be that the news media resigned and stopped covering Trump out of protest? On the other hand, I have to note that I was highly selective in the data gathering process. Not only did I limit myself to articles published by the politics news desk, but I most importantly only selected one source. It would have been interesting to compare the NYT findings with other news outlets. Additionally, by performing a sentinement analysis on the headlines, I would have been able to add a further layer to the analysis. In sum, there are lots of possibilities to further improve on this short paper. Because the key finding of the analysis - that 25% of all articles mention Trump - bears testimony of the interesting nature of the relationship between the news media and Donald Trump.
+
+## References
+\bibliography{literature.bib}
+
+
